@@ -7,68 +7,97 @@ from win32com.client import constants
 import win32com.client as win32
 import pandas as pd
 from ttkbootstrap import Style
+import logging
+import colorlog
 
+# Set up logging with colorlog for console and file logging
+handler = logging.StreamHandler()
+handler.setFormatter(colorlog.ColoredFormatter(
+    "%(log_color)s%(asctime)s - %(levelname)s - %(message)s",
+    log_colors={
+        'DEBUG': 'cyan',
+        'INFO': 'green',
+        'WARNING': 'yellow',
+        'ERROR': 'red',
+        'CRITICAL': 'bold_red',
+    }
+))
+
+file_handler = logging.FileHandler('app.log', mode='w')
+file_handler.setFormatter(logging.Formatter(
+    "%(asctime)s - %(levelname)s - %(message)s"
+))
+
+logging.basicConfig(level=logging.DEBUG, handlers=[handler, file_handler])
 
 def clear_com_cache():
-    # If getting an error mentioning 00020813-0000-0000-C000-000000000046x0x1x9, or No Module mod.CLSIDToClassMap
-    # go to C:\Users\wayde\AppData\Local\Temp\gen_py\3.11 to delete that file.
-    # https://stackoverflow.com/questions/52889704/python-win32com-excel-com-model-started-generating-errors
-    # https://www.pyxll.com/docs/pyxll-4.4.2.pdf
-    # https: // www.youtube.com / watch?v = QUZ - FSAxLtU & ab_channel = SigmaCoding
+    logging.debug('Clearing COM cache.')
     gen_py_path = os.path.join(os.environ.get('LOCALAPPDATA'), 'Temp', 'gen_py')
     if os.path.exists(gen_py_path):
         shutil.rmtree(gen_py_path)
-
+        logging.info('COM cache cleared.')
 
 def open_protected_excel(file_path, temp_file_path, password):
+    logging.debug(f'Attempting to open Excel file: {file_path}')
     clear_com_cache()
     excel = win32.gencache.EnsureDispatch('Excel.Application')
     excel.DisplayAlerts = False
     try:
         if password:
+            logging.debug('Opening Excel file with password protection.')
             wb = excel.Workbooks.Open(file_path, Password=password)
         else:
+            logging.debug('Opening Excel file without password protection.')
             wb = excel.Workbooks.Open(file_path)
         wb.SaveAs(temp_file_path, Password='')
         wb.Close(SaveChanges=True)
+        logging.info('Excel file opened and saved without password.')
         return wb
     except Exception as e:
-        print("Failed to open the Excel file:", e)
+        logging.error(f"Failed to open the Excel file: {e}")
         return False
     finally:
         excel.Quit()
 
-
 def read_excel_file(file_path, password=None):
-    temp_file_path = os.path.join(os.path.dirname(file_path), "~$temp.xlsx")
+    logging.debug(f'Reading Excel file: {file_path}')
+    temp_file_path = os.path.join(os.environ.get('TEMP'), "~$temp.xlsx")
+    logging.debug(f'Temporary file path: {temp_file_path}')
     success = open_protected_excel(file_path, temp_file_path, password)
     if not success:
+        logging.warning('Failed to read the Excel file. Possible incorrect password.')
         return None
     try:
         df = pd.read_excel(temp_file_path)
+        logging.info('Excel file read into DataFrame.')
         return df
     except FileNotFoundError:
-        print("Error: Input file not found.")
+        logging.error('Error: Input file not found.')
         return None
     finally:
         if os.path.exists(temp_file_path):
             os.remove(temp_file_path)
-
+            logging.debug('Temporary file removed.')
 
 def check_required_columns(df, required_columns):
+    logging.debug('Checking for required columns in DataFrame.')
     missing_columns = [col for col in required_columns if col not in df.columns]
     if missing_columns:
-        print("Error: The following columns are missing in the input file:", missing_columns)
+        logging.error(f"The following columns are missing in the input file: {missing_columns}")
         return False
+    logging.info('All required columns are present.')
     return True
 
-
 def export_to_excel(df, output_file_path, state_dropdown, notes_dropdown):
+    logging.debug(f'Exporting DataFrame to Excel file: {output_file_path}')
     writer = pd.ExcelWriter(output_file_path, engine='xlsxwriter')
-    df.to_excel(writer, index=False)
     workbook = writer.book
+    workbook.use_zip64()
+    workbook.nan_inf_to_errors = True
+    df.to_excel(writer, index=False)
     worksheet = writer.sheets['Sheet1']
 
+    logging.debug('Setting up data validation for dropdowns.')
     state_col_letter = chr(ord('A') + df.columns.get_loc('State'))
     state_range = f'{state_col_letter}2:{state_col_letter}{len(df) + 1}'
     worksheet.data_validation(state_range, {'validate': 'list', 'source': state_dropdown})
@@ -77,6 +106,7 @@ def export_to_excel(df, output_file_path, state_dropdown, notes_dropdown):
     notes_range = f'{notes_col_letter}2:{notes_col_letter}{len(df) + 1}'
     worksheet.data_validation(notes_range, {'validate': 'list', 'source': notes_dropdown})
 
+    logging.debug('Setting column widths and formats.')
     for column in df.columns:
         column_width = 16 if column in ['State', 'Notes Filed'] else (
             50 if column == 'Notes' else max(df[column].astype(str).map(len).max(), len(column)))
@@ -95,6 +125,7 @@ def export_to_excel(df, output_file_path, state_dropdown, notes_dropdown):
         'Non Renewing': {'bg_color': '#ff6666'}
     }
 
+    logging.debug('Applying conditional formatting based on state.')
     for state, format_spec in state_format.items():
         format_ = workbook.add_format(format_spec)
         for row in range(1, len(df) + 1):
@@ -117,20 +148,24 @@ def export_to_excel(df, output_file_path, state_dropdown, notes_dropdown):
             worksheet.write(row, col, df.iloc[row - 1, col], cell_format)
 
     writer.close()
+    logging.info(f'DataFrame exported to {output_file_path}')
     return True
-
 
 def update_count_label(label, count):
     label.config(text=f"Files processed: {count}")
-
+    logging.info(f'Updated count label to: Files processed: {count}')
 
 def process_excel():
+    logging.debug('Starting Excel processing.')
     incorrect_password_label.config(text="")
     root.update_idletasks()
 
     input_file_path = source_var.get()
     output_folder_path = destination_var.get()
     password = password_var.get()
+
+    logging.debug(f'Input file path: {input_file_path}')
+    logging.debug(f'Output folder path: {output_folder_path}')
 
     try:
         df = read_excel_file(input_file_path, password)
@@ -139,13 +174,14 @@ def process_excel():
             root.update_idletasks()
             return
 
-        required_columns = ['Expiration Date', 'Insured First Name', 'Insured Last Name', 'Carrier',
+        required_columns = ['Expiration Date', 'Insured', 'Carrier',
                             'Lines Of Business', 'Status', 'Premium', 'Renewal Premium', 'Percentage Change']
         if not check_required_columns(df, required_columns):
             return
 
-        df.rename(columns={'Insured First Name': 'First Name', 'Insured Last Name': 'Last Name'}, inplace=True)
-        df = df[['Expiration Date', 'First Name', 'Last Name', 'Carrier', 'Lines Of Business', 'Status', 'Premium',
+        logging.debug('Renaming and selecting required columns.')
+        df.rename(columns={'Insured': 'Insured Name'}, inplace=True)
+        df = df[['Expiration Date', 'Insured Name', 'Carrier', 'Lines Of Business', 'Status', 'Premium',
                  'Renewal Premium', 'Percentage Change']]
         df['State'] = ""
         df['Notes Filed'] = ""
@@ -161,19 +197,19 @@ def process_excel():
             time.sleep(3)
             root.destroy()
     except Exception as e:
-        print(f"Error: {e}")
+        logging.error(f"Error: {e}")
         incorrect_password_label.config(text="Incorrect password. Please, try again.")
         root.update_idletasks()
-
 
 def select_source_file():
     file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx;*.xls")])
     source_var.set(file_path)
-
+    logging.debug(f'Source file selected: {file_path}')
 
 def select_destination_folder():
     folder_path = filedialog.askdirectory()
     destination_var.set(folder_path)
+    logging.debug(f'Destination folder selected: {folder_path}')
 
 root = tk.Tk()
 root.title("Quadstate Renewal Processor")
@@ -181,6 +217,7 @@ root.geometry('450x400')
 
 style = Style(theme='flatly')
 
+logging.debug('Setting default file paths.')
 if os.path.exists(os.path.join("C:\\", "Users", os.getlogin(), "Downloads", "Copy of Export_RenewalCenter.xlsx")):
     default_input_file = os.path.join("C:\\", "Users", os.getlogin(), "Downloads", "Copy of Export_RenewalCenter.xlsx")
 elif os.path.exists(os.path.join("C:\\", "Users", os.getlogin(), "Downloads", "Export_RenewalCenter.xlsx")):
