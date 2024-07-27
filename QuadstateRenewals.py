@@ -88,7 +88,7 @@ def check_required_columns(df, required_columns):
     logging.info('All required columns are present.')
     return True
 
-def export_to_excel(df, output_file_path, state_dropdown, notes_dropdown):
+def export_to_excel(df, output_file_path, state_dropdown, notes_dropdown, completed_by_dropdown):
     logging.debug(f'Exporting DataFrame to Excel file: {output_file_path}')
     writer = pd.ExcelWriter(output_file_path, engine='xlsxwriter')
     workbook = writer.book
@@ -106,9 +106,13 @@ def export_to_excel(df, output_file_path, state_dropdown, notes_dropdown):
     notes_range = f'{notes_col_letter}2:{notes_col_letter}{len(df) + 1}'
     worksheet.data_validation(notes_range, {'validate': 'list', 'source': notes_dropdown})
 
+    completed_by_col_letter = chr(ord('A') + df.columns.get_loc('Completed By'))
+    completed_by_range = f'{completed_by_col_letter}2:{completed_by_col_letter}{len(df) + 1}'
+    worksheet.data_validation(completed_by_range, {'validate': 'list', 'source': completed_by_dropdown})
+
     logging.debug('Setting column widths and formats.')
     for column in df.columns:
-        column_width = 16 if column in ['State', 'Notes Filed'] else (
+        column_width = 16 if column in ['State', 'Notes Filed', 'Completed By'] else (
             50 if column == 'Notes' else max(df[column].astype(str).map(len).max(), len(column)))
         col_idx = df.columns.get_loc(column)
         worksheet.set_column(col_idx, col_idx, column_width)
@@ -185,13 +189,15 @@ def process_excel():
                  'Renewal Premium', 'Percentage Change']]
         df['State'] = ""
         df['Notes Filed'] = ""
+        df['Completed By'] = ""
 
         state_dropdown = ['Renewal Complete', 'Nowcerts Complete', 'Needs Rewritten', 'Needs Spoke To', 'Non Renewing']
         notes_dropdown = ['Yes', 'No', 'Left VM', 'Sent Email']
+        completed_by_dropdown = ['Danielle Stevens', 'Amber Miller', 'Teresa Morrisette', 'Lane Ross']
 
         df.sort_values(by='Expiration Date', inplace=True)
         output_file_path = os.path.join(output_folder_path, f"Updated_Renewals_{time.strftime('%Y%m%d-%H%M%S')}.xlsx")
-        if export_to_excel(df, output_file_path, state_dropdown, notes_dropdown):
+        if export_to_excel(df, output_file_path, state_dropdown, notes_dropdown, completed_by_dropdown):
             update_count_label(count_label, len(df))
             root.update_idletasks()
             time.sleep(3)
