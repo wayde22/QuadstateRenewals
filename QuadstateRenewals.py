@@ -126,7 +126,8 @@ def export_to_excel(df, output_file_path, state_dropdown, notes_dropdown, comple
         'Nowcerts Complete': {'bg_color': '#36bbe9'},
         'Needs Rewritten': {'bg_color': '#EAE455'},
         'Needs Spoke To': {'bg_color': '#9999FF'},
-        'Non Renewing': {'bg_color': '#ff6666'}
+        'Non Renewing': {'bg_color': '#ff6666'},
+        'Canceled': {'bg_color': '#A9A9A9'}  # Dark gray color for "Canceled" state
     }
 
     logging.debug('Applying conditional formatting based on state.')
@@ -191,7 +192,7 @@ def process_excel():
         df['Notes Filed'] = ""
         df['Completed By'] = ""
 
-        state_dropdown = ['Renewal Complete', 'Nowcerts Complete', 'Needs Rewritten', 'Needs Spoke To', 'Non Renewing']
+        state_dropdown = ['Renewal Complete', 'Nowcerts Complete', 'Needs Rewritten', 'Needs Spoke To', 'Non Renewing', 'Canceled']
         notes_dropdown = ['Yes', 'No', 'Left VM', 'Sent Email']
         completed_by_dropdown = ['Danielle Stevens', 'Amber Miller', 'Teresa Morrisette', 'Lane Ross']
 
