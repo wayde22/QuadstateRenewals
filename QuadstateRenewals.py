@@ -378,16 +378,16 @@ else:
     default_output_folder = ''
 
 source_var = tk.StringVar(value=default_input_file)
-source_label = ttk.Label(root, text="Select Source File:", font=("TkDefaultFont", 9, "bold"))
-source_label.pack(pady=(10, 0))
+source_label = ttk.Label(root, text="Select Source File:", font=("TkDefaultFont", 10, "bold"), anchor="w", justify="left")
+source_label.pack(pady=(10, 0), fill="x", padx=10)
 source_entry = ttk.Entry(root, textvariable=source_var, width=70)
 source_entry.pack()
 source_button = ttk.Button(root, text="Browse Source", command=select_source_file)
 source_button.pack(pady=5)
 
 destination_var = tk.StringVar(value=default_output_folder)
-destination_label = ttk.Label(root, text="Select Destination Folder:", font=("TkDefaultFont", 9, "bold"))
-destination_label.pack(pady=(10, 0))
+destination_label = ttk.Label(root, text="Select Destination Folder:", font=("TkDefaultFont", 10, "bold"), anchor="w", justify="left")
+destination_label.pack(pady=(10, 0), fill="x", padx=10)
 destination_entry = ttk.Entry(root, textvariable=destination_var, width=70)
 destination_entry.pack()
 destination_button = ttk.Button(root, text="Browse Destination", command=select_destination_folder)
