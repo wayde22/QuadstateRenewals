@@ -325,14 +325,28 @@ def process_excel():
         root.update_idletasks()
 
 def select_source_file():
-    file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx;*.xls")])
-    source_var.set(file_path)
-    logging.debug(f'Source file selected: {file_path}')
+    file_path = filedialog.askopenfilename(
+        title="Select Excel File",
+        filetypes=[
+            ("Excel files", "*.xlsx *.xls"),
+            ("Excel 2007+ files", "*.xlsx"),
+            ("Excel 97-2003 files", "*.xls"),
+            ("All files", "*.*")
+        ],
+        initialdir=os.path.dirname(source_var.get()) if source_var.get() else os.path.expanduser("~/Downloads")
+    )
+    if file_path:  # Only update if a file was actually selected
+        source_var.set(file_path)
+        logging.debug(f'Source file selected: {file_path}')
 
 def select_destination_folder():
-    folder_path = filedialog.askdirectory()
-    destination_var.set(folder_path)
-    logging.debug(f'Destination folder selected: {folder_path}')
+    folder_path = filedialog.askdirectory(
+        title="Select Destination Folder",
+        initialdir=os.path.dirname(destination_var.get()) if destination_var.get() else os.path.expanduser("~/Desktop")
+    )
+    if folder_path:  # Only update if a folder was actually selected
+        destination_var.set(folder_path)
+        logging.debug(f'Destination folder selected: {folder_path}')
 
 root = tk.Tk()
 root.title("Quadstate Renewal Processor")
