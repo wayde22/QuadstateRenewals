@@ -9,6 +9,10 @@ import pandas as pd
 from ttkbootstrap import Style
 import logging
 import colorlog
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Set up logging with colorlog for console and file logging
 handler = logging.StreamHandler()
@@ -228,7 +232,21 @@ def process_excel():
 
     input_file_path = source_var.get()
     output_folder_path = destination_var.get()
-    password = password_var.get()
+    
+    # Get password from environment variable first, then fallback to UI input
+    password = (
+        os.getenv('EXCEL_PASSWORD') or  # Primary environment variable
+        os.getenv('QUADSTATE_PASSWORD') or  # Alternative environment variable
+        password_var.get()  # UI input as last resort
+    )
+    
+    # Log password source for debugging
+    if os.getenv('EXCEL_PASSWORD'):
+        logging.debug('Using password from EXCEL_PASSWORD environment variable')
+    elif os.getenv('QUADSTATE_PASSWORD'):
+        logging.debug('Using password from QUADSTATE_PASSWORD environment variable')
+    else:
+        logging.debug('Using password from UI input')
 
     logging.debug(f'Input file path: {input_file_path}')
     logging.debug(f'Output folder path: {output_folder_path}')
