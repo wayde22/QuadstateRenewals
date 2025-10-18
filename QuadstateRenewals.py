@@ -227,26 +227,34 @@ def update_count_label(label, count):
 
 def process_excel():
     logging.debug('Starting Excel processing.')
-    incorrect_password_label.config(text="")
+    status_var.set("Processing... Please wait")
+    progress_var.set(0)
     root.update_idletasks()
 
     input_file_path = source_var.get()
     output_folder_path = destination_var.get()
     
-    # Get password from environment variable first, then fallback to UI input
+    # Get password from environment variable
     password = (
         os.getenv('EXCEL_PASSWORD') or  # Primary environment variable
         os.getenv('QUADSTATE_PASSWORD') or  # Alternative environment variable
-        password_var.get()  # UI input as last resort
+        None  # No UI fallback since password field is removed
     )
     
-    # Log password source for debugging
+    # Update status bar based on password source
     if os.getenv('EXCEL_PASSWORD'):
+        status_var.set("Ready - Using password from EXCEL_PASSWORD environment variable")
         logging.debug('Using password from EXCEL_PASSWORD environment variable')
     elif os.getenv('QUADSTATE_PASSWORD'):
+        status_var.set("Ready - Using password from QUADSTATE_PASSWORD environment variable")
         logging.debug('Using password from QUADSTATE_PASSWORD environment variable')
     else:
-        logging.debug('Using password from UI input')
+        status_var.set("Warning - No password found in environment variables")
+        logging.warning('No password found in environment variables')
+    
+    # Update progress
+    progress_var.set(10)
+    root.update_idletasks()
 
     logging.debug(f'Input file path: {input_file_path}')
     logging.debug(f'Output folder path: {output_folder_path}')
@@ -254,15 +262,28 @@ def process_excel():
     try:
         df = read_excel_file(input_file_path, password)
         if df is None:
-            incorrect_password_label.config(text="Incorrect password. Please try again.")
+            status_var.set("Error - Incorrect password or file cannot be read")
+            progress_var.set(0)
             root.update_idletasks()
             return
+        
+        # Update progress
+        progress_var.set(30)
+        root.update_idletasks()
 
         required_columns = ['Expiration Date', 'Insured', 'Carrier',
                             'Lines Of Business', 'Status', 'Premium', 'Renewal Premium', 'Percentage Change']
         if not check_required_columns(df, required_columns):
+            status_var.set("Error - Missing required columns in Excel file")
+            progress_var.set(0)
+            root.update_idletasks()
             return
 
+        # Update progress
+        progress_var.set(50)
+        status_var.set("Processing - Preparing data...")
+        root.update_idletasks()
+        
         logging.debug('Renaming and selecting required columns.')
         df.rename(columns={'Insured': 'Insured Name'}, inplace=True)
         df = df[['Expiration Date', 'Insured Name', 'Carrier', 'Lines Of Business', 'Status', 'Premium',
@@ -277,16 +298,30 @@ def process_excel():
         notes_dropdown = ['Yes', 'Call Filed in AMS']
         completed_by_dropdown = ['Danielle Stevens', 'Amber Miller', 'Teresa Morrisette', 'Lane Ross']
 
+        # Update progress
+        progress_var.set(70)
+        status_var.set("Processing - Sorting data and creating Excel file...")
+        root.update_idletasks()
+        
         df.sort_values(by='Expiration Date', inplace=True)
+        
+        # Update progress
+        progress_var.set(85)
+        root.update_idletasks()
+        
         output_file_path = os.path.join(output_folder_path, f"Updated_Renewals_{time.strftime('%Y%m%d-%H%M%S')}.xlsx")
         if export_to_excel(df, output_file_path, state_dropdown, contacted_via_dropdown, notes_dropdown, completed_by_dropdown):
+            # Complete progress bar
+            progress_var.set(100)
+            status_var.set(f"Success - Processed {len(df)} records. File saved to Desktop.")
             update_count_label(count_label, len(df))
             root.update_idletasks()
             time.sleep(3)
             root.destroy()
     except Exception as e:
         logging.error(f"Error: {e}")
-        incorrect_password_label.config(text="Incorrect password. Please, try again.")
+        progress_var.set(0)
+        status_var.set(f"Error - {str(e)}")
         root.update_idletasks()
 
 def select_source_file():
@@ -336,17 +371,18 @@ destination_entry.pack()
 destination_button = ttk.Button(root, text="Browse", command=select_destination_folder)
 destination_button.pack(pady=5)
 
-password_var = tk.StringVar()
-password_label = ttk.Label(root, text="Enter file password (if any):")
-password_label.pack(pady=(10, 0))
-password_entry = ttk.Entry(root, textvariable=password_var, show="*")
-password_entry.pack(pady=5)
+# Status bar instead of password field
+status_var = tk.StringVar(value="Ready - Password loaded from environment")
+status_label = ttk.Label(root, textvariable=status_var, relief="sunken", anchor="w")
+# status_label.pack(fill="x", pady=(10, 0), padx=10)
+
+# Progress bar
+progress_var = tk.DoubleVar()
+progress_bar = ttk.Progressbar(root, variable=progress_var, maximum=100, length=400, mode='determinate')
+progress_bar.pack(pady=(10, 10), padx=10, fill="x")
 
 count_label = ttk.Label(root, text="Files processed: 0")
 count_label.pack(pady=(10, 0))
-
-incorrect_password_label = ttk.Label(root, text="", style="danger.TLabel")
-incorrect_password_label.pack(pady=(5, 0))
 
 style.theme_use('superhero')
 
