@@ -40,15 +40,29 @@ def clear_com_cache():
 def open_protected_excel(file_path, temp_file_path, password):
     logging.debug(f'Attempting to open Excel file: {file_path}')
     clear_com_cache()
-    excel = win32.gencache.EnsureDispatch('Excel.Application')
-    excel.DisplayAlerts = False
+    excel = None
     try:
+        # Try to create Excel application with error handling
+        excel = win32.Dispatch('Excel.Application')
+        
+        # Set properties with error handling
+        try:
+            excel.DisplayAlerts = False
+        except:
+            logging.debug('Could not set DisplayAlerts property')
+        
+        try:
+            excel.Visible = False
+        except:
+            logging.debug('Could not set Visible property')
+        
         if password:
             logging.debug('Opening Excel file with password protection.')
             wb = excel.Workbooks.Open(file_path, Password=password)
         else:
             logging.debug('Opening Excel file without password protection.')
             wb = excel.Workbooks.Open(file_path)
+        
         wb.SaveAs(temp_file_path, Password='')
         wb.Close(SaveChanges=True)
         logging.info('Excel file opened and saved without password.')
@@ -57,16 +71,46 @@ def open_protected_excel(file_path, temp_file_path, password):
         logging.error(f"Failed to open the Excel file: {e}")
         return False
     finally:
-        excel.Quit()
+        if excel:
+            try:
+                excel.Quit()
+            except:
+                pass
 
 def read_excel_file(file_path, password=None):
     logging.debug(f'Reading Excel file: {file_path}')
+    
+    # First try to read directly with pandas (for non-password protected files)
+    if not password:
+        try:
+            df = pd.read_excel(file_path)
+            logging.info('Excel file read directly into DataFrame.')
+            return df
+        except Exception as e:
+            logging.debug(f'Direct read failed: {e}. Trying COM method.')
+    
+    # If password protected or direct read failed, use COM method
     temp_file_path = os.path.join(os.environ.get('TEMP'), "~$temp.xlsx")
     logging.debug(f'Temporary file path: {temp_file_path}')
     success = open_protected_excel(file_path, temp_file_path, password)
     if not success:
-        logging.warning('Failed to read the Excel file. Possible incorrect password.')
+        logging.warning('Failed to read the Excel file with COM. Trying alternative method.')
+        # Try alternative method using msoffcrypto-tool if available
+        try:
+            import msoffcrypto
+            temp_file = msoffcrypto.OfficeFile(open(file_path, 'rb'))
+            temp_file.load_key(password=password)
+            with open(temp_file_path, 'wb') as f:
+                temp_file.decrypt(f)
+            df = pd.read_excel(temp_file_path)
+            logging.info('Excel file read using msoffcrypto-tool.')
+            return df
+        except ImportError:
+            logging.error('msoffcrypto-tool not available. Please install it with: pip install msoffcrypto-tool')
+        except Exception as e:
+            logging.error(f'Alternative method also failed: {e}')
         return None
+    
     try:
         df = pd.read_excel(temp_file_path)
         logging.info('Excel file read into DataFrame.')
@@ -88,7 +132,7 @@ def check_required_columns(df, required_columns):
     logging.info('All required columns are present.')
     return True
 
-def export_to_excel(df, output_file_path, state_dropdown, notes_dropdown, completed_by_dropdown):
+def export_to_excel(df, output_file_path, state_dropdown, contacted_via_dropdown, notes_dropdown, completed_by_dropdown):
     logging.debug(f'Exporting DataFrame to Excel file: {output_file_path}')
     writer = pd.ExcelWriter(output_file_path, engine='xlsxwriter')
     workbook = writer.book
@@ -102,6 +146,10 @@ def export_to_excel(df, output_file_path, state_dropdown, notes_dropdown, comple
     state_range = f'{state_col_letter}2:{state_col_letter}{len(df) + 1}'
     worksheet.data_validation(state_range, {'validate': 'list', 'source': state_dropdown})
 
+    contacted_via_col_letter = chr(ord('A') + df.columns.get_loc('Contacted VIA'))
+    contacted_via_range = f'{contacted_via_col_letter}2:{contacted_via_col_letter}{len(df) + 1}'
+    worksheet.data_validation(contacted_via_range, {'validate': 'list', 'source': contacted_via_dropdown})
+
     notes_col_letter = chr(ord('A') + df.columns.get_loc('Notes Filed'))
     notes_range = f'{notes_col_letter}2:{notes_col_letter}{len(df) + 1}'
     worksheet.data_validation(notes_range, {'validate': 'list', 'source': notes_dropdown})
@@ -112,7 +160,7 @@ def export_to_excel(df, output_file_path, state_dropdown, notes_dropdown, comple
 
     logging.debug('Setting column widths and formats.')
     for column in df.columns:
-        column_width = 16 if column in ['State', 'Notes Filed', 'Completed By'] else (
+        column_width = 16 if column in ['State', 'Contacted VIA', 'Notes Filed', 'Completed By'] else (
             50 if column == 'Notes' else max(df[column].astype(str).map(len).max(), len(column)))
         col_idx = df.columns.get_loc(column)
         worksheet.set_column(col_idx, col_idx, column_width)
@@ -122,12 +170,15 @@ def export_to_excel(df, output_file_path, state_dropdown, notes_dropdown, comple
         worksheet.write(0, col_num, value, header_format)
 
     state_format = {
-        'Renewal Complete': {'bg_color': '#90EE90'},
-        'Nowcerts Complete': {'bg_color': '#36bbe9'},
-        'Needs Rewritten': {'bg_color': '#EAE455'},
-        'Needs Spoke To': {'bg_color': '#9999FF'},
-        'Non Renewing': {'bg_color': '#ff6666'},
-        'Canceled': {'bg_color': '#A9A9A9'}  # Dark gray color for "Canceled" state
+        'Renewal Complete': {'bg_color': '#90EE90'},  # Light green
+        'Nowcerts Complete': {'bg_color': '#36bbe9'},  # Light blue
+        'Needs Rewritten': {'bg_color': '#EAE455'},  # Light yellow
+        'Contact Attempted': {'bg_color': '#9999FF'},  # Light purple
+        'Try Bundling': {'bg_color': '#FFB6C1'},  # Light pink
+        'Already Rewritten': {'bg_color': '#FFA500'},  # Pale green
+        'Best Option': {'bg_color': '#DDA0DD'},  # Plum
+        'Non Renewing': {'bg_color': '#ff6666'},  # Light red
+        'Canceled': {'bg_color': '#A9A9A9'}  # Dark gray
     }
 
     logging.debug('Applying conditional formatting based on state.')
@@ -139,17 +190,27 @@ def export_to_excel(df, output_file_path, state_dropdown, notes_dropdown, comple
                                           'criteria': f'INDIRECT("${state_col_letter}${row + 1}")="{state}"',
                                           'format': format_})
 
-    notes_format = workbook.add_format({'align': 'center'})
+    # Format for Notes Filed and Contacted VIA columns (center aligned)
+    center_format = workbook.add_format({'align': 'center'})
     notes_col_index = df.columns.get_loc('Notes Filed')
+    contacted_via_col_index = df.columns.get_loc('Contacted VIA')
+    
     for row in range(1, len(df) + 1):
+        # Notes Filed column
         cell_value = df.iloc[row - 1, notes_col_index]
-        worksheet.write(row, notes_col_index, cell_value, notes_format)
+        worksheet.write(row, notes_col_index, cell_value, center_format)
+        
+        # Contacted VIA column
+        cell_value = df.iloc[row - 1, contacted_via_col_index]
+        worksheet.write(row, contacted_via_col_index, cell_value, center_format)
 
     grey_format = workbook.add_format({'bg_color': '#f0f0f0'})
     for row in range(1, len(df) + 1, 2):
         for col in range(len(df.columns)):
-            cell_format = grey_format if col != notes_col_index else \
-                workbook.add_format({'bg_color': '#f0f0f0', 'align': 'center'})
+            if col == notes_col_index or col == contacted_via_col_index:
+                cell_format = workbook.add_format({'bg_color': '#f0f0f0', 'align': 'center'})
+            else:
+                cell_format = grey_format
             worksheet.write(row, col, df.iloc[row - 1, col], cell_format)
 
     writer.close()
@@ -189,16 +250,18 @@ def process_excel():
         df = df[['Expiration Date', 'Insured Name', 'Carrier', 'Lines Of Business', 'Status', 'Premium',
                  'Renewal Premium', 'Percentage Change']]
         df['State'] = ""
+        df['Contacted VIA'] = ""
         df['Notes Filed'] = ""
         df['Completed By'] = ""
 
-        state_dropdown = ['Renewal Complete', 'Nowcerts Complete', 'Needs Rewritten', 'Needs Spoke To', 'Non Renewing', 'Canceled']
-        notes_dropdown = ['Yes', 'No', 'Left VM', 'Sent Email']
+        state_dropdown = ['Renewal Complete', 'Nowcerts Complete', 'Needs Rewritten', 'Contact Attempted', 'Try Bundling', 'Already Rewritten', 'Best Option', 'Non Renewing', 'Canceled']
+        contacted_via_dropdown = ['Left VM', 'Sent Text', 'Sent Email', 'Spoke to']
+        notes_dropdown = ['Yes', 'Call Filed in AMS']
         completed_by_dropdown = ['Danielle Stevens', 'Amber Miller', 'Teresa Morrisette', 'Lane Ross']
 
         df.sort_values(by='Expiration Date', inplace=True)
         output_file_path = os.path.join(output_folder_path, f"Updated_Renewals_{time.strftime('%Y%m%d-%H%M%S')}.xlsx")
-        if export_to_excel(df, output_file_path, state_dropdown, notes_dropdown, completed_by_dropdown):
+        if export_to_excel(df, output_file_path, state_dropdown, contacted_via_dropdown, notes_dropdown, completed_by_dropdown):
             update_count_label(count_label, len(df))
             root.update_idletasks()
             time.sleep(3)
