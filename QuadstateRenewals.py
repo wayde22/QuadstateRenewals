@@ -175,7 +175,7 @@ def export_to_excel(df, output_file_path, state_dropdown, contacted_via_dropdown
         'Needs Rewritten': {'bg_color': '#EAE455'},  # Light yellow
         'Contact Attempted': {'bg_color': '#9999FF'},  # Light purple
         'Try Bundling': {'bg_color': '#FFB6C1'},  # Light pink
-        'Already Rewritten': {'bg_color': '#FFA500'},  # Pale green
+        'Already Rewritten': {'bg_color': '#FFA500'},  # Orange
         'Best Option': {'bg_color': '#DDA0DD'},  # Plum
         'Non Renewing': {'bg_color': '#ff6666'},  # Light red
         'Canceled': {'bg_color': '#A9A9A9'}  # Dark gray
