@@ -325,6 +325,10 @@ def process_excel():
         root.update_idletasks()
 
 def select_source_file():
+    current_source = source_var.get()
+    # Use the directory of the current source file, or Downloads if empty
+    initial_dir = os.path.dirname(current_source) if current_source and os.path.exists(current_source) else os.path.expanduser("~/Downloads")
+    
     file_path = filedialog.askopenfilename(
         title="Select Excel File",
         filetypes=[
@@ -333,16 +337,20 @@ def select_source_file():
             ("Excel 97-2003 files", "*.xls"),
             ("All files", "*.*")
         ],
-        initialdir=os.path.dirname(source_var.get()) if source_var.get() else os.path.expanduser("~/Downloads")
+        initialdir=initial_dir
     )
     if file_path:  # Only update if a file was actually selected
         source_var.set(file_path)
         logging.debug(f'Source file selected: {file_path}')
 
 def select_destination_folder():
+    current_destination = destination_var.get()
+    # Use the current destination folder as initial directory, or Desktop if empty
+    initial_dir = current_destination if current_destination and os.path.exists(current_destination) else os.path.expanduser("~/Desktop")
+    
     folder_path = filedialog.askdirectory(
         title="Select Destination Folder",
-        initialdir=os.path.dirname(destination_var.get()) if destination_var.get() else os.path.expanduser("~/Desktop")
+        initialdir=initial_dir
     )
     if folder_path:  # Only update if a folder was actually selected
         destination_var.set(folder_path)
