@@ -62,15 +62,28 @@ def open_protected_excel(file_path, temp_file_path, password):
         
         if password:
             logging.debug('Opening Excel file with password protection.')
-            wb = excel.Workbooks.Open(file_path, Password=password)
+            try:
+                wb = excel.Workbooks.Open(file_path, Password=password)
+            except Exception as e:
+                logging.debug(f'Failed to open with password: {e}')
+                # Try without password as fallback
+                try:
+                    wb = excel.Workbooks.Open(file_path)
+                except Exception as e2:
+                    logging.debug(f'Failed to open without password: {e2}')
+                    raise e  # Re-raise the original password error
         else:
             logging.debug('Opening Excel file without password protection.')
             wb = excel.Workbooks.Open(file_path)
         
+        if wb is None:
+            logging.error("Failed to open workbook")
+            return False
+            
         wb.SaveAs(temp_file_path, Password='')
         wb.Close(SaveChanges=True)
         logging.info('Excel file opened and saved without password.')
-        return wb
+        return True
     except Exception as e:
         logging.error(f"Failed to open the Excel file: {e}")
         return False
@@ -91,37 +104,52 @@ def read_excel_file(file_path, password=None):
             logging.info('Excel file read directly into DataFrame.')
             return df
         except Exception as e:
-            logging.debug(f'Direct read failed: {e}. Trying COM method.')
+            logging.debug(f'Direct read failed: {e}. Trying msoffcrypto-tool method.')
     
-    # If password protected or direct read failed, use COM method
+    # Use msoffcrypto-tool method directly (more reliable than COM)
     temp_file_path = os.path.join(os.environ.get('TEMP'), "~$temp.xlsx")
     logging.debug(f'Temporary file path: {temp_file_path}')
-    success = open_protected_excel(file_path, temp_file_path, password)
-    if not success:
-        logging.warning('Failed to read the Excel file with COM. Trying alternative method.')
-        # Try alternative method using msoffcrypto-tool if available
-        try:
-            import msoffcrypto
-            temp_file = msoffcrypto.OfficeFile(open(file_path, 'rb'))
-            temp_file.load_key(password=password)
-            with open(temp_file_path, 'wb') as f:
-                temp_file.decrypt(f)
-            df = pd.read_excel(temp_file_path)
-            logging.info('Excel file read using msoffcrypto-tool.')
-            return df
-        except ImportError:
-            logging.error('msoffcrypto-tool not available. Please install it with: pip install msoffcrypto-tool')
-        except Exception as e:
-            logging.error(f'Alternative method also failed: {e}')
-        return None
     
     try:
+        import msoffcrypto
+        temp_file = msoffcrypto.OfficeFile(open(file_path, 'rb'))
+        if password:
+            temp_file.load_key(password=password)
+        else:
+            temp_file.load_key()
+        with open(temp_file_path, 'wb') as f:
+            temp_file.decrypt(f)
         df = pd.read_excel(temp_file_path)
-        logging.info('Excel file read into DataFrame.')
+        logging.info('Excel file read using msoffcrypto-tool.')
         return df
-    except FileNotFoundError:
-        logging.error('Error: Input file not found.')
-        return None
+    except ImportError:
+        logging.error('msoffcrypto-tool not available. Please install it with: pip install msoffcrypto-tool')
+        # Fallback to COM method if msoffcrypto-tool is not available
+        logging.warning('Falling back to COM method.')
+        success = open_protected_excel(file_path, temp_file_path, password)
+        if not success:
+            return None
+        try:
+            df = pd.read_excel(temp_file_path)
+            logging.info('Excel file read into DataFrame via COM fallback.')
+            return df
+        except FileNotFoundError:
+            logging.error('Error: Input file not found.')
+            return None
+    except Exception as e:
+        logging.error(f'msoffcrypto-tool method failed: {e}')
+        # Fallback to COM method
+        logging.warning('Falling back to COM method.')
+        success = open_protected_excel(file_path, temp_file_path, password)
+        if not success:
+            return None
+        try:
+            df = pd.read_excel(temp_file_path)
+            logging.info('Excel file read into DataFrame via COM fallback.')
+            return df
+        except FileNotFoundError:
+            logging.error('Error: Input file not found.')
+            return None
     finally:
         if os.path.exists(temp_file_path):
             os.remove(temp_file_path)
