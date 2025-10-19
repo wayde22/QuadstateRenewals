@@ -12,7 +12,25 @@ import colorlog
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-load_dotenv()
+# Check multiple locations for .env file (in order of preference)
+env_locations = [
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'),  # Same folder as executable
+    'C:\\QuadstateRenewalsProperties\\.env',  # Dedicated properties folder on C drive
+    os.path.join(os.path.expanduser('~'), '.env'),  # User home directory
+    os.path.join(os.path.expanduser('~'), 'Documents', '.env'),  # Documents folder
+    os.path.join(os.path.expanduser('~'), 'AppData', 'Local', 'QuadstateRenewals', '.env'),  # AppData folder
+]
+
+env_loaded = False
+for env_path in env_locations:
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+        env_loaded = True
+        break
+
+if not env_loaded:
+    # Fallback to default behavior
+    load_dotenv()
 
 # Set up logging with colorlog for console and file logging
 handler = logging.StreamHandler()
@@ -97,63 +115,48 @@ def open_protected_excel(file_path, temp_file_path, password):
 def read_excel_file(file_path, password=None):
     logging.debug(f'Reading Excel file: {file_path}')
     
-    # First try to read directly with pandas (for non-password protected files)
+    # Try direct pandas read first (most reliable for non-password protected files)
     if not password:
         try:
-            df = pd.read_excel(file_path)
+            df = pd.read_excel(file_path, engine='openpyxl')
             logging.info('Excel file read directly into DataFrame.')
             return df
         except Exception as e:
-            logging.debug(f'Direct read failed: {e}. Trying msoffcrypto-tool method.')
+            logging.debug(f'Direct read failed: {e}. Trying password-protected method.')
     
-    # Use msoffcrypto-tool method directly (more reliable than COM)
-    temp_file_path = os.path.join(os.environ.get('TEMP'), "~$temp.xlsx")
+    # For password-protected files, use msoffcrypto-tool (more reliable than COM)
+    temp_file_path = os.path.join(os.environ.get('TEMP'), f"~$temp_{int(time.time())}.xlsx")
     logging.debug(f'Temporary file path: {temp_file_path}')
     
     try:
         import msoffcrypto
-        temp_file = msoffcrypto.OfficeFile(open(file_path, 'rb'))
-        if password:
-            temp_file.load_key(password=password)
-        else:
-            temp_file.load_key()
-        with open(temp_file_path, 'wb') as f:
-            temp_file.decrypt(f)
-        df = pd.read_excel(temp_file_path)
+        with open(file_path, 'rb') as f:
+            temp_file = msoffcrypto.OfficeFile(f)
+            if password:
+                temp_file.load_key(password=password)
+            else:
+                temp_file.load_key()
+            with open(temp_file_path, 'wb') as decrypted_file:
+                temp_file.decrypt(decrypted_file)
+        
+        df = pd.read_excel(temp_file_path, engine='openpyxl')
         logging.info('Excel file read using msoffcrypto-tool.')
         return df
+        
     except ImportError:
         logging.error('msoffcrypto-tool not available. Please install it with: pip install msoffcrypto-tool')
-        # Fallback to COM method if msoffcrypto-tool is not available
-        logging.warning('Falling back to COM method.')
-        success = open_protected_excel(file_path, temp_file_path, password)
-        if not success:
-            return None
-        try:
-            df = pd.read_excel(temp_file_path)
-            logging.info('Excel file read into DataFrame via COM fallback.')
-            return df
-        except FileNotFoundError:
-            logging.error('Error: Input file not found.')
-            return None
+        return None
     except Exception as e:
         logging.error(f'msoffcrypto-tool method failed: {e}')
-        # Fallback to COM method
-        logging.warning('Falling back to COM method.')
-        success = open_protected_excel(file_path, temp_file_path, password)
-        if not success:
-            return None
-        try:
-            df = pd.read_excel(temp_file_path)
-            logging.info('Excel file read into DataFrame via COM fallback.')
-            return df
-        except FileNotFoundError:
-            logging.error('Error: Input file not found.')
-            return None
+        return None
     finally:
+        # Clean up temporary file
         if os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
-            logging.debug('Temporary file removed.')
+            try:
+                os.remove(temp_file_path)
+                logging.debug('Temporary file removed.')
+            except Exception as e:
+                logging.warning(f'Could not remove temporary file: {e}')
 
 def check_required_columns(df, required_columns):
     logging.debug('Checking for required columns in DataFrame.')
@@ -205,6 +208,7 @@ def export_to_excel(df, output_file_path, state_dropdown, contacted_via_dropdown
         'Renewal Complete': {'bg_color': '#90EE90'},  # Light green
         'Nowcerts Complete': {'bg_color': '#36bbe9'},  # Light blue
         'Needs Rewritten': {'bg_color': '#EAE455'},  # Light yellow
+        'Rewritten': {'bg_color': '#a7754d'},  # Gilmore Girl Brown
         'Contact Attempted': {'bg_color': '#9999FF'},  # Light purple
         'Try Bundling': {'bg_color': '#FFB6C1'},  # Light pink
         'Already Rewritten': {'bg_color': '#FFA500'},  # Orange
@@ -214,13 +218,15 @@ def export_to_excel(df, output_file_path, state_dropdown, contacted_via_dropdown
     }
 
     logging.debug('Applying conditional formatting based on state.')
+    # Apply conditional formatting to the entire data range
+    data_range = f'A2:{chr(ord("A") + len(df.columns) - 1)}{len(df) + 1}'
+    
     for state, format_spec in state_format.items():
         format_ = workbook.add_format(format_spec)
-        for row in range(1, len(df) + 1):
-            worksheet.conditional_format(f'A{row + 1}:{chr(ord("A") + len(df.columns) - 1)}{row + 1}',
-                                         {'type': 'formula',
-                                          'criteria': f'INDIRECT("${state_col_letter}${row + 1}")="{state}"',
-                                          'format': format_})
+        worksheet.conditional_format(data_range,
+                                     {'type': 'formula',
+                                      'criteria': f'${state_col_letter}2="{state}"',
+                                      'format': format_})
 
     # Format for Notes Filed and Contacted VIA columns (center aligned)
     center_format = workbook.add_format({'align': 'center'})
@@ -321,8 +327,8 @@ def process_excel():
         df['Notes Filed'] = ""
         df['Completed By'] = ""
 
-        state_dropdown = ['Renewal Complete', 'Nowcerts Complete', 'Needs Rewritten', 'Contact Attempted', 'Try Bundling', 'Already Rewritten', 'Best Option', 'Non Renewing', 'Canceled']
-        contacted_via_dropdown = ['Left VM', 'Sent Text', 'Sent Email', 'Spoke to']
+        state_dropdown = ['Renewal Complete', 'Nowcerts Complete', 'Needs Rewritten', 'Rewritten', 'Contact Attempted', 'Try Bundling', 'Already Rewritten', 'Best Option', 'Non Renewing', 'Canceled']
+        contacted_via_dropdown = ['Left VM', 'Sent Text', 'Sent Email', 'Spoken with']
         notes_dropdown = ['Yes', 'Call Filed in AMS']
         completed_by_dropdown = ['Danielle Stevens', 'Amber Miller', 'Teresa Morrisette', 'Lane Ross']
 
@@ -400,6 +406,8 @@ else:
 
 if os.path.exists(os.path.join("C:\\", "Users", os.getlogin(), "OneDrive - quadstateinsurance.com", "Desktop")):
     default_output_folder = os.path.join("C:\\", "Users", os.getlogin(), "OneDrive - quadstateinsurance.com", "Desktop")
+elif os.path.exists(os.path.join("C:\\", "Users", os.getlogin(), "OneDrive - Quadstate Insurance Agency LLC", "Desktop")):
+    default_output_folder = os.path.join("C:\\", "Users", os.getlogin(), "OneDrive - Quadstate Insurance Agency LLC", "Desktop")
 elif os.path.exists(os.path.join("C:\\", "Users", os.getlogin(), "Desktop")):
     default_output_folder = os.path.join("C:\\", "Users", os.getlogin(), "Desktop")
 else:
