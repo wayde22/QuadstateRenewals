@@ -330,7 +330,7 @@ def process_excel():
         state_dropdown = ['Renewal Complete', 'Nowcerts Complete', 'Needs Rewritten', 'Rewritten', 'Contact Attempted', 'Try Bundling', 'Already Rewritten', 'Best Option', 'Non Renewing', 'Canceled']
         contacted_via_dropdown = ['Left VM', 'Sent Text', 'Sent Email', 'Spoken with']
         notes_dropdown = ['Yes', 'Call Filed in AMS']
-        completed_by_dropdown = ['Danielle Stevens', 'Amber Miller', 'Teresa Morrisette', 'Lane Ross']
+        completed_by_dropdown = ['Danielle Stevens', 'Amber Miller', 'Teresa Morrisette', 'Jillian Stevens']
 
         # Update progress
         progress_var.set(70)
