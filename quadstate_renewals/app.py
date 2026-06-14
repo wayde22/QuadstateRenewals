@@ -24,8 +24,8 @@ class QuadstateRenewalsApp(ctk.CTk):
         super().__init__()
 
         self.title("Quadstate Renewal Processor")
-        self.geometry('640x330')
-        self.minsize(560, 330)
+        self.geometry('640x375')
+        self.minsize(560, 375)
         self.grid_columnconfigure(0, weight=1)
 
         logging.debug('Setting default file paths.')
@@ -36,6 +36,14 @@ class QuadstateRenewalsApp(ctk.CTk):
         self._build_widgets()
 
     def _build_widgets(self):
+        title_label = ctk.CTkLabel(
+            self,
+            text="Quadstate Insurance",
+            font=ctk.CTkFont(size=24, weight="bold"),
+            anchor="center",
+        )
+        title_label.grid(row=0, column=0, sticky="ew", padx=24, pady=(18, 10))
+
         source_label = ctk.CTkLabel(
             self,
             text="Select Source File:",
@@ -43,10 +51,10 @@ class QuadstateRenewalsApp(ctk.CTk):
             anchor="w",
             justify="left",
         )
-        source_label.grid(row=0, column=0, sticky="ew", padx=24, pady=(18, 4))
+        source_label.grid(row=1, column=0, sticky="ew", padx=24, pady=(0, 4))
 
         source_row = ctk.CTkFrame(self, fg_color="transparent")
-        source_row.grid(row=1, column=0, sticky="ew", padx=24, pady=(0, 8))
+        source_row.grid(row=2, column=0, sticky="ew", padx=24, pady=(0, 8))
         source_row.grid_columnconfigure(0, weight=1)
 
         source_entry = ctk.CTkEntry(source_row, textvariable=self.source_var)
@@ -67,10 +75,10 @@ class QuadstateRenewalsApp(ctk.CTk):
             anchor="w",
             justify="left",
         )
-        destination_label.grid(row=2, column=0, sticky="ew", padx=24, pady=(4, 4))
+        destination_label.grid(row=3, column=0, sticky="ew", padx=24, pady=(4, 4))
 
         destination_row = ctk.CTkFrame(self, fg_color="transparent")
-        destination_row.grid(row=3, column=0, sticky="ew", padx=24, pady=(0, 10))
+        destination_row.grid(row=4, column=0, sticky="ew", padx=24, pady=(0, 10))
         destination_row.grid_columnconfigure(0, weight=1)
 
         destination_entry = ctk.CTkEntry(destination_row, textvariable=self.destination_var)
@@ -91,14 +99,14 @@ class QuadstateRenewalsApp(ctk.CTk):
             anchor="w",
             justify="left",
         )
-        self.status_label.grid(row=4, column=0, sticky="ew", padx=24, pady=(4, 0))
+        self.status_label.grid(row=5, column=0, sticky="ew", padx=24, pady=(4, 0))
 
         self.progress_bar = ctk.CTkProgressBar(self, mode='determinate')
         self.progress_bar.set(0)
-        self.progress_bar.grid(row=5, column=0, sticky="ew", padx=24, pady=(10, 8))
+        self.progress_bar.grid(row=6, column=0, sticky="ew", padx=24, pady=(10, 8))
 
         self.count_label = ctk.CTkLabel(self, text="Records processed: 0")
-        self.count_label.grid(row=6, column=0, pady=(2, 6))
+        self.count_label.grid(row=7, column=0, pady=(2, 6))
 
         process_button = ctk.CTkButton(
             self,
@@ -106,7 +114,7 @@ class QuadstateRenewalsApp(ctk.CTk):
             width=180,
             command=self.process_excel,
         )
-        process_button.grid(row=7, column=0, pady=(0, 16))
+        process_button.grid(row=8, column=0, pady=(0, 16))
 
     def update_count_label(self, record_count, worksheet_row_count):
         self.count_label.configure(
