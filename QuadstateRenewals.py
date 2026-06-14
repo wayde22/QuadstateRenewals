@@ -1,9 +1,26 @@
 import os
 import shutil
+import sys
 import time
 import tkinter as tk
 from tkinter import ttk, filedialog
-from win32com.client import constants
+
+
+def ensure_com_cache_dir():
+    local_app_data = os.environ.get('LOCALAPPDATA')
+    if not local_app_data:
+        return
+
+    gen_py_path = os.path.join(
+        local_app_data,
+        'Temp',
+        'gen_py',
+        f'{sys.version_info.major}.{sys.version_info.minor}'
+    )
+    os.makedirs(gen_py_path, exist_ok=True)
+
+
+ensure_com_cache_dir()
 import win32com.client as win32
 import pandas as pd
 from ttkbootstrap import Style
@@ -54,10 +71,16 @@ logging.basicConfig(level=logging.DEBUG, handlers=[handler, file_handler])
 
 def clear_com_cache():
     logging.debug('Clearing COM cache.')
-    gen_py_path = os.path.join(os.environ.get('LOCALAPPDATA'), 'Temp', 'gen_py')
+    local_app_data = os.environ.get('LOCALAPPDATA')
+    if not local_app_data:
+        logging.warning('LOCALAPPDATA is not set; skipping COM cache clear.')
+        return
+
+    gen_py_path = os.path.join(local_app_data, 'Temp', 'gen_py')
     if os.path.exists(gen_py_path):
         shutil.rmtree(gen_py_path)
         logging.info('COM cache cleared.')
+    ensure_com_cache_dir()
 
 def open_protected_excel(file_path, temp_file_path, password):
     logging.debug(f'Attempting to open Excel file: {file_path}')
