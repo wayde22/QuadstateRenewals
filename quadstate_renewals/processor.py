@@ -12,34 +12,44 @@ from .excel_writer import export_to_excel
 
 StatusCallback = Callable[[str], None]
 ProgressCallback = Callable[[int], None]
+MISSING_COLUMNS_STATUS_LIMIT = 3
 
 
 @dataclass
 class ProcessResult:
     success: bool
     record_count: int = 0
+    worksheet_row_count: int = 0
     output_file_path: Optional[str] = None
     error: Optional[str] = None
 
 
-def _set_status(callback, message):
+def _set_status(callback: Optional[StatusCallback], message: str):
     if callback:
         callback(message)
 
 
-def _set_progress(callback, percent):
+def _set_progress(callback: Optional[ProgressCallback], percent: int):
     if callback:
         callback(percent)
 
 
-def check_required_columns(df, required_columns):
-    logging.debug('Checking for required columns in DataFrame.')
-    missing_columns = [col for col in required_columns if col not in df.columns]
-    if missing_columns:
-        logging.error(f"The following columns are missing in the input file: {missing_columns}")
-        return False
-    logging.info('All required columns are present.')
-    return True
+def get_missing_required_columns(df, required_columns):
+    return [col for col in required_columns if col not in df.columns]
+
+
+def format_missing_columns_message(missing_columns):
+    visible_columns = missing_columns[:MISSING_COLUMNS_STATUS_LIMIT]
+    visible_text = ", ".join(visible_columns)
+
+    if len(missing_columns) <= MISSING_COLUMNS_STATUS_LIMIT:
+        return f"Error - Source file format changed. Missing columns: {visible_text}"
+
+    remaining_count = len(missing_columns) - MISSING_COLUMNS_STATUS_LIMIT
+    return (
+        "Error - Source file format changed. "
+        f"Missing columns: {visible_text}, and {remaining_count} more. See app.log."
+    )
 
 
 def prepare_renewals_dataframe(df):
@@ -53,7 +63,12 @@ def prepare_renewals_dataframe(df):
     return df
 
 
-def process_renewals(input_file_path, output_folder_path, on_status=None, on_progress=None):
+def process_renewals(
+    input_file_path,
+    output_folder_path,
+    on_status: Optional[StatusCallback] = None,
+    on_progress: Optional[ProgressCallback] = None,
+):
     logging.debug('Starting Excel processing.')
     _set_status(on_status, "Processing... Please wait")
     _set_progress(on_progress, 0)
@@ -81,11 +96,16 @@ def process_renewals(input_file_path, output_folder_path, on_status=None, on_pro
 
         _set_progress(on_progress, 30)
 
-        if not check_required_columns(df, REQUIRED_COLUMNS):
-            message = "Error - Missing required columns in Excel file"
+        logging.debug('Checking for required columns in DataFrame.')
+        missing_columns = get_missing_required_columns(df, REQUIRED_COLUMNS)
+        if missing_columns:
+            logging.error(f"The following columns are missing in the input file: {missing_columns}")
+            message = format_missing_columns_message(missing_columns)
             _set_status(on_status, message)
             _set_progress(on_progress, 0)
             return ProcessResult(success=False, error=message)
+
+        logging.info('All required columns are present.')
 
         _set_status(on_status, "Processing - Preparing data...")
         _set_progress(on_progress, 50)
@@ -109,6 +129,7 @@ def process_renewals(input_file_path, output_folder_path, on_status=None, on_pro
             return ProcessResult(
                 success=True,
                 record_count=len(df),
+                worksheet_row_count=len(df) + 1,
                 output_file_path=output_file_path,
             )
 

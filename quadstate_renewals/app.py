@@ -15,6 +15,10 @@ from .logging_config import configure_logging
 from .processor import process_renewals
 
 
+STATUS_DEFAULT_TEXT_COLOR = ("gray10", "gray90")
+STATUS_WARNING_TEXT_COLOR = ("#946200", "#FFD166")
+
+
 class QuadstateRenewalsApp(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -80,19 +84,20 @@ class QuadstateRenewalsApp(ctk.CTk):
         )
         destination_button.grid(row=0, column=1)
 
-        status_label = ctk.CTkLabel(
+        self.status_label = ctk.CTkLabel(
             self,
             textvariable=self.status_var,
+            text_color=STATUS_DEFAULT_TEXT_COLOR,
             anchor="w",
             justify="left",
         )
-        status_label.grid(row=4, column=0, sticky="ew", padx=24, pady=(4, 0))
+        self.status_label.grid(row=4, column=0, sticky="ew", padx=24, pady=(4, 0))
 
         self.progress_bar = ctk.CTkProgressBar(self, mode='determinate')
         self.progress_bar.set(0)
         self.progress_bar.grid(row=5, column=0, sticky="ew", padx=24, pady=(10, 8))
 
-        self.count_label = ctk.CTkLabel(self, text="Files processed: 0")
+        self.count_label = ctk.CTkLabel(self, text="Records processed: 0")
         self.count_label.grid(row=6, column=0, pady=(2, 6))
 
         process_button = ctk.CTkButton(
@@ -103,24 +108,36 @@ class QuadstateRenewalsApp(ctk.CTk):
         )
         process_button.grid(row=7, column=0, pady=(0, 16))
 
-    def update_count_label(self, count):
-        self.count_label.configure(text=f"Files processed: {count}")
-        logging.info(f'Updated count label to: Files processed: {count}')
+    def update_count_label(self, record_count, worksheet_row_count):
+        self.count_label.configure(
+            text=f"Records processed: {record_count} | Excel rows: {worksheet_row_count}"
+        )
+        logging.info(
+            f'Updated count label to: Records processed: {record_count}; Excel rows: {worksheet_row_count}'
+        )
 
     def set_progress(self, percent):
         self.progress_bar.set(percent / 100)
+        self.update_idletasks()
+
+    def set_status(self, message):
+        self.status_var.set(message)
+        if message.startswith("Warning -") or "Source file format changed" in message:
+            self.status_label.configure(text_color=STATUS_WARNING_TEXT_COLOR)
+        else:
+            self.status_label.configure(text_color=STATUS_DEFAULT_TEXT_COLOR)
         self.update_idletasks()
 
     def process_excel(self):
         result = process_renewals(
             self.source_var.get(),
             self.destination_var.get(),
-            on_status=self.status_var.set,
+            on_status=self.set_status,
             on_progress=self.set_progress,
         )
 
         if result.success:
-            self.update_count_label(result.record_count)
+            self.update_count_label(result.record_count, result.worksheet_row_count)
             self.update_idletasks()
             time.sleep(3)
             self.destroy()
