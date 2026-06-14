@@ -2,8 +2,9 @@ import os
 import shutil
 import sys
 import time
+import customtkinter as ctk
 import tkinter as tk
-from tkinter import ttk, filedialog
+from tkinter import filedialog
 
 
 def ensure_com_cache_dir():
@@ -23,7 +24,6 @@ def ensure_com_cache_dir():
 ensure_com_cache_dir()
 import win32com.client as win32
 import pandas as pd
-from ttkbootstrap import Style
 import logging
 import colorlog
 from dotenv import load_dotenv
@@ -279,14 +279,17 @@ def export_to_excel(df, output_file_path, state_dropdown, contacted_via_dropdown
     return True
 
 def update_count_label(label, count):
-    label.config(text=f"Files processed: {count}")
+    label.configure(text=f"Files processed: {count}")
     logging.info(f'Updated count label to: Files processed: {count}')
+
+def set_progress(percent):
+    progress_bar.set(percent / 100)
+    root.update_idletasks()
 
 def process_excel():
     logging.debug('Starting Excel processing.')
     status_var.set("Processing... Please wait")
-    progress_var.set(0)
-    root.update_idletasks()
+    set_progress(0)
 
     input_file_path = source_var.get()
     output_folder_path = destination_var.get()
@@ -310,8 +313,7 @@ def process_excel():
         logging.warning('No password found in environment variables')
     
     # Update progress
-    progress_var.set(10)
-    root.update_idletasks()
+    set_progress(10)
 
     logging.debug(f'Input file path: {input_file_path}')
     logging.debug(f'Output folder path: {output_folder_path}')
@@ -320,26 +322,22 @@ def process_excel():
         df = read_excel_file(input_file_path, password)
         if df is None:
             status_var.set("Error - Incorrect password or file cannot be read")
-            progress_var.set(0)
-            root.update_idletasks()
+            set_progress(0)
             return
         
         # Update progress
-        progress_var.set(30)
-        root.update_idletasks()
+        set_progress(30)
 
         required_columns = ['Expiration Date', 'Insured', 'Carrier',
                             'Lines Of Business', 'Status', 'Premium', 'Renewal Premium', 'Percentage Change']
         if not check_required_columns(df, required_columns):
             status_var.set("Error - Missing required columns in Excel file")
-            progress_var.set(0)
-            root.update_idletasks()
+            set_progress(0)
             return
 
         # Update progress
-        progress_var.set(50)
         status_var.set("Processing - Preparing data...")
-        root.update_idletasks()
+        set_progress(50)
         
         logging.debug('Renaming and selecting required columns.')
         df.rename(columns={'Insured': 'Insured Name'}, inplace=True)
@@ -356,30 +354,27 @@ def process_excel():
         completed_by_dropdown = ['Danielle Stevens', 'Amber Miller', 'Teresa Morrisette', 'Jillian Stevens']
 
         # Update progress
-        progress_var.set(70)
         status_var.set("Processing - Sorting data and creating Excel file...")
-        root.update_idletasks()
+        set_progress(70)
         
         df.sort_values(by='Expiration Date', inplace=True)
         
         # Update progress
-        progress_var.set(85)
-        root.update_idletasks()
+        set_progress(85)
         
         output_file_path = os.path.join(output_folder_path, f"Updated_Renewals_{time.strftime('%Y%m%d-%H%M%S')}.xlsx")
         if export_to_excel(df, output_file_path, state_dropdown, contacted_via_dropdown, notes_dropdown, completed_by_dropdown):
             # Complete progress bar
-            progress_var.set(100)
             status_var.set(f"Success - Processed {len(df)} records. File saved to Desktop.")
+            set_progress(100)
             update_count_label(count_label, len(df))
             root.update_idletasks()
             time.sleep(3)
             root.destroy()
     except Exception as e:
         logging.error(f"Error: {e}")
-        progress_var.set(0)
         status_var.set(f"Error - {str(e)}")
-        root.update_idletasks()
+        set_progress(0)
 
 def select_source_file():
     current_source = source_var.get()
@@ -413,11 +408,14 @@ def select_destination_folder():
         destination_var.set(folder_path)
         logging.debug(f'Destination folder selected: {folder_path}')
 
-root = tk.Tk()
-root.title("Quadstate Renewal Processor")
-root.geometry('450x400')
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("dark-blue")
 
-style = Style(theme='flatly')
+root = ctk.CTk()
+root.title("Quadstate Renewal Processor")
+root.geometry('640x330')
+root.minsize(560, 330)
+root.grid_columnconfigure(0, weight=1)
 
 logging.debug('Setting default file paths.')
 if os.path.exists(os.path.join("C:\\", "Users", os.getlogin(), "Downloads", "Copy of Export_RenewalCenter.xlsx")):
@@ -437,37 +435,41 @@ else:
     default_output_folder = ''
 
 source_var = tk.StringVar(value=default_input_file)
-source_label = ttk.Label(root, text="Select Source File:", font=("TkDefaultFont", 10, "bold"), anchor="w", justify="left")
-source_label.pack(pady=(10, 0), fill="x", padx=10)
-source_entry = ttk.Entry(root, textvariable=source_var, width=70)
-source_entry.pack()
-source_button = ttk.Button(root, text="Browse Source", command=select_source_file)
-source_button.pack(pady=5)
+source_label = ctk.CTkLabel(root, text="Select Source File:", font=ctk.CTkFont(size=13, weight="bold"), anchor="w", justify="left")
+source_label.grid(row=0, column=0, sticky="ew", padx=24, pady=(18, 4))
+source_row = ctk.CTkFrame(root, fg_color="transparent")
+source_row.grid(row=1, column=0, sticky="ew", padx=24, pady=(0, 8))
+source_row.grid_columnconfigure(0, weight=1)
+source_entry = ctk.CTkEntry(source_row, textvariable=source_var)
+source_entry.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+source_button = ctk.CTkButton(source_row, text="Browse Source", width=140, command=select_source_file)
+source_button.grid(row=0, column=1)
 
 destination_var = tk.StringVar(value=default_output_folder)
-destination_label = ttk.Label(root, text="Select Destination Folder:", font=("TkDefaultFont", 10, "bold"), anchor="w", justify="left")
-destination_label.pack(pady=(10, 0), fill="x", padx=10)
-destination_entry = ttk.Entry(root, textvariable=destination_var, width=70)
-destination_entry.pack()
-destination_button = ttk.Button(root, text="Browse Destination", command=select_destination_folder)
-destination_button.pack(pady=5)
+destination_label = ctk.CTkLabel(root, text="Select Destination Folder:", font=ctk.CTkFont(size=13, weight="bold"), anchor="w", justify="left")
+destination_label.grid(row=2, column=0, sticky="ew", padx=24, pady=(4, 4))
+destination_row = ctk.CTkFrame(root, fg_color="transparent")
+destination_row.grid(row=3, column=0, sticky="ew", padx=24, pady=(0, 10))
+destination_row.grid_columnconfigure(0, weight=1)
+destination_entry = ctk.CTkEntry(destination_row, textvariable=destination_var)
+destination_entry.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+destination_button = ctk.CTkButton(destination_row, text="Browse Destination", width=160, command=select_destination_folder)
+destination_button.grid(row=0, column=1)
 
 # Status bar instead of password field
 status_var = tk.StringVar(value="Ready - Password loaded from environment")
-status_label = ttk.Label(root, textvariable=status_var, relief="sunken", anchor="w")
-# status_label.pack(fill="x", pady=(10, 0), padx=10)
+status_label = ctk.CTkLabel(root, textvariable=status_var, anchor="w", justify="left")
+status_label.grid(row=4, column=0, sticky="ew", padx=24, pady=(4, 0))
 
 # Progress bar
-progress_var = tk.DoubleVar()
-progress_bar = ttk.Progressbar(root, variable=progress_var, maximum=100, length=400, mode='determinate')
-progress_bar.pack(pady=(10, 10), padx=10, fill="x")
+progress_bar = ctk.CTkProgressBar(root, mode='determinate')
+progress_bar.set(0)
+progress_bar.grid(row=5, column=0, sticky="ew", padx=24, pady=(10, 8))
 
-count_label = ttk.Label(root, text="Files processed: 0")
-count_label.pack(pady=(10, 0))
+count_label = ctk.CTkLabel(root, text="Files processed: 0")
+count_label.grid(row=6, column=0, pady=(2, 6))
 
-style.theme_use('superhero')
-
-process_button = ttk.Button(root, text="Process", command=process_excel)
-process_button.pack(pady=10)
+process_button = ctk.CTkButton(root, text="Process", width=180, command=process_excel)
+process_button.grid(row=7, column=0, pady=(0, 16))
 
 root.mainloop()
