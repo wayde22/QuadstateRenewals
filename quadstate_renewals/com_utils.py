@@ -19,7 +19,18 @@ def ensure_com_cache_dir():
 
 
 ensure_com_cache_dir()
-import win32com.client as win32
+
+
+def _import_win32com():
+    try:
+        import win32com.client as win32
+    except ImportError as exc:
+        logging.error(
+            'pywin32 is not available. Install or package pywin32>=311. '
+            f'Missing module: {getattr(exc, "name", "win32com")}'
+        )
+        return None
+    return win32
 
 
 def clear_com_cache():
@@ -39,6 +50,10 @@ def clear_com_cache():
 def open_protected_excel(file_path, temp_file_path, password):
     logging.debug(f'Attempting to open Excel file: {file_path}')
     clear_com_cache()
+    win32 = _import_win32com()
+    if win32 is None:
+        return False
+
     excel = None
     try:
         excel = win32.Dispatch('Excel.Application')

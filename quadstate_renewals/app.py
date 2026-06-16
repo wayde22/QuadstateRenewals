@@ -7,6 +7,8 @@ from tkinter import filedialog
 import customtkinter as ctk
 
 from .config import (
+    ensure_user_env_file,
+    get_env_locations,
     get_default_input_file,
     get_default_output_folder,
     load_environment,
@@ -197,7 +199,19 @@ def run_app():
 
 
 def main():
-    load_environment()
     configure_logging()
+    created_env_path = ensure_user_env_file()
+    if created_env_path:
+        logging.debug(f'Created environment template at: {created_env_path}')
+
+    env_path = load_environment()
+    if env_path:
+        logging.debug(f'Loaded environment from: {env_path}')
+    else:
+        checked_locations = "; ".join(str(path) for path in get_env_locations())
+        logging.debug(
+            "No .env file loaded. Using existing environment variables only. "
+            f"Checked locations: {checked_locations}"
+        )
     run_app()
 

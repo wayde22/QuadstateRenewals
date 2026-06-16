@@ -2,13 +2,48 @@ import os
 import sys
 from pathlib import Path
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
+
+
+APP_DATA_DIR_NAME = 'QuadstateRenewals'
+ENV_TEMPLATE = """# Add your Excel file password here
+EXCEL_PASSWORD=PasswordHere
+"""
+PASSWORD_PLACEHOLDERS = {'PasswordHere', 'your_password_here'}
 
 
 def get_application_dir():
     if getattr(sys, 'frozen', False):
         return Path(sys.executable).resolve().parent
     return Path(sys.argv[0]).resolve().parent
+
+
+def get_app_data_dir():
+    local_app_data = os.environ.get('LOCALAPPDATA')
+    if local_app_data:
+        return Path(local_app_data) / APP_DATA_DIR_NAME
+    return Path.home() / 'AppData' / 'Local' / APP_DATA_DIR_NAME
+
+
+def get_log_file_path():
+    return get_app_data_dir() / 'app.log'
+
+
+def get_user_env_file_path():
+    return get_app_data_dir() / '.env'
+
+
+def ensure_user_env_file():
+    env_path = get_user_env_file_path()
+    if env_path.exists():
+        return None
+
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    env_path.write_text(ENV_TEMPLATE, encoding='utf-8')
+    return env_path
 
 
 def get_env_locations():
@@ -18,11 +53,14 @@ def get_env_locations():
         Path('C:/QuadstateRenewalsProperties/.env'),
         home_dir / '.env',
         home_dir / 'Documents' / '.env',
-        home_dir / 'AppData' / 'Local' / 'QuadstateRenewals' / '.env',
+        get_user_env_file_path(),
     ]
 
 
 def load_environment():
+    if load_dotenv is None:
+        return None
+
     for env_path in get_env_locations():
         if env_path.exists():
             load_dotenv(env_path)
@@ -34,7 +72,7 @@ def load_environment():
 
 def get_excel_password():
     password = os.getenv('EXCEL_PASSWORD')
-    if password:
+    if password and password not in PASSWORD_PLACEHOLDERS:
         return (
             password,
             'Ready - Using password from EXCEL_PASSWORD environment variable',
@@ -43,7 +81,7 @@ def get_excel_password():
         )
 
     password = os.getenv('QUADSTATE_PASSWORD')
-    if password:
+    if password and password not in PASSWORD_PLACEHOLDERS:
         return (
             password,
             'Ready - Using password from QUADSTATE_PASSWORD environment variable',

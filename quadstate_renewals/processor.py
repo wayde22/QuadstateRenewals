@@ -6,7 +6,8 @@ from typing import Callable, Optional
 
 from .config import get_excel_password
 from .constants import OUTPUT_COLUMNS, REQUIRED_COLUMNS
-from .excel_reader import read_excel_file
+from .dependencies import MissingDependencyError
+from .excel_reader import MissingExcelPasswordError, read_excel_file
 from .excel_writer import export_to_excel
 
 
@@ -50,6 +51,14 @@ def format_missing_columns_message(missing_columns):
         "Error - Source file format changed. "
         f"Missing columns: {visible_text}, and {remaining_count} more. See app.log."
     )
+
+
+def format_missing_dependency_message(error):
+    return f"Error - Missing dependency: {error.package_name}. See app.log."
+
+
+def format_missing_password_message():
+    return "Error - Password required for protected source file. See app.log."
 
 
 def prepare_renewals_dataframe(df):
@@ -134,6 +143,27 @@ def process_renewals(
             )
 
         message = "Error - Excel export failed"
+        _set_status(on_status, message)
+        _set_progress(on_progress, 0)
+        return ProcessResult(success=False, error=message)
+    except MissingExcelPasswordError as e:
+        logging.exception(
+            "Password-protected source file could not be read because no "
+            "password was loaded. Set EXCEL_PASSWORD or QUADSTATE_PASSWORD."
+        )
+        message = format_missing_password_message()
+        _set_status(on_status, message)
+        _set_progress(on_progress, 0)
+        return ProcessResult(success=False, error=message)
+    except MissingDependencyError as e:
+        logging.exception(
+            "Missing dependency while processing renewals: package=%s, "
+            "missing_module=%s, install_hint=%s",
+            e.package_name,
+            e.missing_module,
+            e.install_hint,
+        )
+        message = format_missing_dependency_message(e)
         _set_status(on_status, message)
         _set_progress(on_progress, 0)
         return ProcessResult(success=False, error=message)

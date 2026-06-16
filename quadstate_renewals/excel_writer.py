@@ -1,7 +1,5 @@
 import logging
 
-import pandas as pd
-
 from .constants import (
     COMPLETED_BY_DROPDOWN,
     CONTACTED_VIA_DROPDOWN,
@@ -9,10 +7,36 @@ from .constants import (
     STATE_DROPDOWN,
     STATE_FORMAT,
 )
+from .dependencies import MissingDependencyError
+
+
+def _import_pandas():
+    try:
+        import pandas as pd
+    except ImportError as exc:
+        raise MissingDependencyError(
+            'pandas',
+            'pandas>=2.0.0',
+            getattr(exc, 'name', None),
+        ) from exc
+    return pd
+
+
+def _require_xlsxwriter():
+    try:
+        import xlsxwriter  # noqa: F401
+    except ImportError as exc:
+        raise MissingDependencyError(
+            'xlsxwriter',
+            'xlsxwriter>=3.2.0',
+            getattr(exc, 'name', None),
+        ) from exc
 
 
 def export_to_excel(df, output_file_path):
     logging.debug(f'Exporting DataFrame to Excel file: {output_file_path}')
+    pd = _import_pandas()
+    _require_xlsxwriter()
     writer = pd.ExcelWriter(output_file_path, engine='xlsxwriter')
     workbook = writer.book
     workbook.use_zip64()
